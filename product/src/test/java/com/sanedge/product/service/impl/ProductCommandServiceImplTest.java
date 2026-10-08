@@ -3,7 +3,7 @@ package com.sanedge.product.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -21,11 +21,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.stubbing.Answer;
 
+import com.sanedge.common.adapter.category.CategoryPort;
+import com.sanedge.common.adapter.merchant.MerchantPort;
+import com.sanedge.common.adapter.model.Category;
+import com.sanedge.common.adapter.model.Merchant;
 import com.sanedge.common.config.RedisService;
 import com.sanedge.common.domain.response.ApiResponse;
 import com.sanedge.common.observability.TracingMetrics;
-import com.sanedge.merchant.entity.Merchant;
-import com.sanedge.merchant.repository.MerchantQueryRepository;
 import com.sanedge.product.domain.requests.CreateProductRequest;
 import com.sanedge.product.domain.requests.UpdateProductRequest;
 import com.sanedge.product.domain.response.ProductResponse;
@@ -49,7 +51,10 @@ class ProductCommandServiceImplTest {
     private ProductQueryRepository productQueryRepository;
 
     @Mock
-    private MerchantQueryRepository merchantQueryRepository;
+    private MerchantPort merchantPort;
+
+    @Mock
+    private CategoryPort categoryPort;
 
     @Mock
     private Validator validator;
@@ -73,10 +78,19 @@ class ProductCommandServiceImplTest {
         productService = new ProductCommandServiceImpl(
                 productCommandRepository,
                 productQueryRepository,
-                merchantQueryRepository,
+                merchantPort,
+                categoryPort,
                 validator,
                 redisService,
                 tracingMetrics);
+    }
+
+    private Merchant createValidMerchant() {
+        return new Merchant(1, 1, "Test Merchant", null, null, null, null, "active", null, null);
+    }
+
+    private Category createValidCategory() {
+        return new Category(1, "Test Category", "Test Category Description", "test-category", null, null, null);
     }
 
     private Product createValidProduct(Long id) {
@@ -138,6 +152,8 @@ class ProductCommandServiceImplTest {
 
         when(validator.validate(any())).thenReturn(Set.of());
 
+        when(categoryPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidCategory()));
+
         when(productCommandRepository.persist(any(Product.class))).thenReturn(Uni.createFrom().item(savedProduct));
 
         when(redisService.deleteReactive(anyString())).thenReturn(Uni.createFrom().voidItem());
@@ -179,11 +195,12 @@ class ProductCommandServiceImplTest {
         Product updatedProduct = createValidProduct(productId);
         updatedProduct.setName("Updated Product");
         updatedProduct.setPrice(150000);
-        Merchant merchant = new Merchant();
 
         when(validator.validate(any())).thenReturn(Set.of());
 
-        when(merchantQueryRepository.findMerchantById(any())).thenReturn(Uni.createFrom().item(merchant));
+        when(merchantPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidMerchant()));
+
+        when(categoryPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidCategory()));
 
         when(productQueryRepository.findProductById(productId))
                 .thenReturn(Uni.createFrom().item(Optional.of(existingProduct)));
@@ -211,7 +228,8 @@ class ProductCommandServiceImplTest {
 
         when(validator.validate(any())).thenReturn(Set.of());
 
-        when(merchantQueryRepository.findMerchantById(any())).thenReturn(Uni.createFrom().nullItem());
+        when(merchantPort.findById(anyInt())).thenReturn(Uni.createFrom()
+                .failure(new com.sanedge.common.exception.ResourceNotFoundException("Merchant not found: 1")));
 
         Uni<ApiResponse<ProductResponse>> resultUni = productService.updateProduct(request);
 
@@ -223,11 +241,12 @@ class ProductCommandServiceImplTest {
 
         Long productId = 1L;
         UpdateProductRequest request = createValidUpdateRequest(productId);
-        Merchant merchant = new Merchant();
 
         lenient().when(validator.validate(any())).thenReturn(Set.of());
 
-        when(merchantQueryRepository.findMerchantById(anyLong())).thenReturn(Uni.createFrom().item(merchant));
+        when(merchantPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidMerchant()));
+
+        when(categoryPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidCategory()));
 
         when(productQueryRepository.findProductById(productId)).thenReturn(Uni.createFrom().item(Optional.empty()));
 
@@ -433,6 +452,8 @@ class ProductCommandServiceImplTest {
 
         when(validator.validate(any())).thenReturn(Set.of());
 
+        when(categoryPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidCategory()));
+
         when(productCommandRepository.persist(any(Product.class))).thenReturn(Uni.createFrom().item(savedProduct));
 
         when(redisService.deleteReactive("product:id:1")).thenReturn(Uni.createFrom().voidItem());
@@ -449,11 +470,12 @@ class ProductCommandServiceImplTest {
         UpdateProductRequest request = createValidUpdateRequest(productId);
         Product existingProduct = createValidProduct(productId);
         Product updatedProduct = createValidProduct(productId);
-        Merchant merchant = new Merchant();
 
         when(validator.validate(any())).thenReturn(Set.of());
 
-        when(merchantQueryRepository.findMerchantById(any())).thenReturn(Uni.createFrom().item(merchant));
+        when(merchantPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidMerchant()));
+
+        when(categoryPort.findById(anyInt())).thenReturn(Uni.createFrom().item(createValidCategory()));
 
         when(productQueryRepository.findProductById(productId))
                 .thenReturn(Uni.createFrom().item(Optional.of(existingProduct)));

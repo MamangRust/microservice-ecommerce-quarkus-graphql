@@ -36,6 +36,6 @@ RUN mvn clean package -pl merchant_business -am -DskipTests -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/merchant_business/target/quarkus-app/ ./
-EXPOSE 9021 8086
+EXPOSE 9021 8101
 USER 1001
 ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]

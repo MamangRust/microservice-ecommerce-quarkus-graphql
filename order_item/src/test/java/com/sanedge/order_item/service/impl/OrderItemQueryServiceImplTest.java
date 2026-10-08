@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-import com.sanedge.common.domain.response.ApiResponse;
+import com.sanedge.common.domain.response.ApiResponsePagination;
 import com.sanedge.common.domain.response.PagedResult;
 import com.sanedge.common.observability.TracingMetrics;
 import com.sanedge.order_item.domain.requests.FindAllOrderItemRequest;
@@ -76,10 +76,14 @@ class OrderItemQueryServiceImplTest {
         req.setPageSize(10);
         when(orderItemRepository.findOrderItems(any(FindAllOrderItemRequest.class)))
                 .thenReturn(Uni.createFrom().item(new PagedResult<>(List.of(mkItem(1L)), 1)));
-        ApiResponse<List<com.sanedge.order_item.domain.response.OrderItemResponse>> result = service.findAll(req)
-                .await().indefinitely();
+        ApiResponsePagination<List<com.sanedge.order_item.domain.response.OrderItemResponse>> result = service
+                .findAll(req).await().indefinitely();
         assertThat(result.status()).isEqualTo("success");
         assertThat(result.message()).isEqualTo("Order items retrieved successfully");
+        assertThat(result.data()).hasSize(1);
+        assertThat(result.pagination()).isNotNull();
+        assertThat(result.pagination().totalRecords()).isEqualTo(1);
+        assertThat(result.pagination().currentPage()).isEqualTo(1);
     }
 
     @Test

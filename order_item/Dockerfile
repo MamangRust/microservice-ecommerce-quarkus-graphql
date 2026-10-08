@@ -37,6 +37,6 @@ RUN mvn clean package -pl order_item -am -DskipTests -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/order_item/target/quarkus-app/ ./
-EXPOSE 50056 8086
+EXPOSE 8103 9019
 USER 1001
 ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]

@@ -2,6 +2,7 @@ package com.sanedge.order_item.handler;
 
 import java.util.stream.Collectors;
 
+import com.sanedge.common.domain.response.PaginationMeta;
 import com.sanedge.common.exception.ResourceNotFoundException;
 import com.sanedge.order_item.domain.requests.FindAllOrderItemRequest;
 import com.sanedge.order_item.domain.response.OrderItemResponse;
@@ -47,6 +48,9 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemQueryServiceGrpc.O
                                 .map(this::toProto)
                                 .collect(Collectors.toList()));
                     }
+                    if (apiResp.pagination() != null) {
+                        builder.setPagination(toProto(apiResp.pagination()));
+                    }
                     return builder.build();
                 })
                 .onFailure().transform(e -> GrpcErrorMapper.toStatusRuntimeException(e));
@@ -70,6 +74,9 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemQueryServiceGrpc.O
                                 .map(this::toProto)
                                 .collect(Collectors.toList()));
                     }
+                    if (apiResp.pagination() != null) {
+                        builder.setPagination(toProto(apiResp.pagination()));
+                    }
                     return builder.build();
                 })
                 .onFailure().transform(e -> GrpcErrorMapper.toStatusRuntimeException(e));
@@ -92,6 +99,9 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemQueryServiceGrpc.O
                         builder.addAllData(apiResp.data().stream()
                                 .map(this::toProto)
                                 .collect(Collectors.toList()));
+                    }
+                    if (apiResp.pagination() != null) {
+                        builder.setPagination(toProto(apiResp.pagination()));
                     }
                     return builder.build();
                 })
@@ -122,6 +132,15 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemQueryServiceGrpc.O
                     }
                     return GrpcErrorMapper.toStatusRuntimeException(e);
                 });
+    }
+
+    private pb.Api.PaginationMeta toProto(PaginationMeta m) {
+        return pb.Api.PaginationMeta.newBuilder()
+                .setCurrentPage(m.currentPage())
+                .setPageSize(m.pageSize())
+                .setTotalPages(m.totalPages())
+                .setTotalRecords(m.totalRecords())
+                .build();
     }
 
     private pb.order_item.OrderItemCommon.OrderItemResponse toProto(OrderItemResponse r) {

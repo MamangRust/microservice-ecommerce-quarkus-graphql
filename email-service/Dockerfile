@@ -36,6 +36,6 @@ RUN mvn clean package -pl email-service -am -DskipTests -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/email-service/target/quarkus-app/ ./
-EXPOSE 8092
+EXPOSE 8105
 USER 1001
 ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]

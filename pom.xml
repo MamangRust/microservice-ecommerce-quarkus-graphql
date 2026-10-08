@@ -92,11 +92,6 @@
             </dependency>
             <dependency>
                 <groupId>com.sanedge</groupId>
-                <artifactId>card</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
                 <artifactId>merchant</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -107,17 +102,7 @@
             </dependency>
             <dependency>
                 <groupId>com.sanedge</groupId>
-                <artifactId>topup</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
                 <artifactId>transaction</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>transfer</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -128,11 +113,6 @@
             <dependency>
                 <groupId>com.sanedge</groupId>
                 <artifactId>auth</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.sanedge</groupId>
-                <artifactId>withdraw</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
