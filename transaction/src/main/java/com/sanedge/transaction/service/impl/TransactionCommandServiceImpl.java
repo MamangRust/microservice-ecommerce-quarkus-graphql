@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import com.sanedge.common.config.RedisService;
 import com.sanedge.common.domain.response.ApiResponse;
+import com.sanedge.common.event.EventTopics;
 import com.sanedge.common.exception.ResourceNotFoundException;
 import com.sanedge.common.exception.InvalidRequestException;
 import com.sanedge.common.exception.ResourceAlreadyExistsException;
@@ -95,7 +96,7 @@ public class TransactionCommandServiceImpl implements TransactionCommandService 
                 .chain(v -> redisService.deleteReactive("transaction:active:*").replaceWithVoid())
                 .chain(v -> redisService.deleteReactive("transaction:trashed:*").replaceWithVoid())
                 .chain(v -> redisService.deleteReactive("transaction:merchant:*").replaceWithVoid())
-                .onFailure().recoverWithItem((Void) null);
+                .onFailure().recoverWithItem(err -> null);
     }
 
     @Override
@@ -168,7 +169,8 @@ public class TransactionCommandServiceImpl implements TransactionCommandService 
                                         transaction.setStatus(PaymentStatus.PENDING);
 
                                         return transactionCommandRepository.persist(transaction)
-                                                .chain(saved -> sendTransactionEmail(saved, order).replaceWith(saved));
+                                                .chain(saved -> sendTransactionEmail(saved, order).replaceWith(saved))
+                                                .chain(saved -> persistTransactionStats(saved, order).replaceWith(saved));
                                     });
                         })
                         .chain(saved -> {
@@ -414,8 +416,6 @@ public class TransactionCommandServiceImpl implements TransactionCommandService 
                                 })));
     }
 
-    // Package-private to allow @Spy-based happy-path tests to bypass the email
-    // Kafka chain.
     Uni<Void> sendTransactionEmail(Transaction tx, Order order) {
         return userPort
                 .findById(order.userId())
@@ -447,8 +447,45 @@ public class TransactionCommandServiceImpl implements TransactionCommandService 
                     event.setPayload(payload.encode());
                     return transactionOutboxRepository.persist(event).replaceWithVoid();
                 })
-                .onFailure().invoke(err -> logger.error("Failed to send transaction email", err))
-                .replaceWithVoid()
-                .onFailure().recoverWithItem((Void) null);
+                    .onFailure().invoke(err -> logger.error("Failed to send transaction email", err))
+                    .replaceWithVoid()
+                    .onFailure().recoverWithItem(err -> null);
+    }
+
+    /**
+     * Writes the stats event of a created transaction into the transactional
+     * outbox instead of publishing it directly. The row is stored in the same
+     * database transaction as the transaction itself, so the event is
+     * guaranteed to exist once the transaction was created — even when the
+     * broker is unavailable. {@code TransactionOutboxPublisher} relays it to
+     * Kafka afterwards.
+     */
+    Uni<Void> persistTransactionStats(Transaction tx, Order order) {
+        String eventId = UUID.randomUUID().toString();
+        JsonObject payload = new JsonObject()
+                .put("transaction_id", tx.getId())
+                .put("order_id", tx.getOrderId())
+                .put("merchant_id", tx.getMerchantId())
+                .put("payment_method", tx.getPaymentMethod())
+                .put("status", tx.getStatus().name())
+                .put("amount", tx.getAmount().doubleValue());
+        JsonObject event = new JsonObject()
+                .put("event_id", eventId)
+                .put("event_type", EventTopics.TRANSACTION)
+                .put("occurred_at", Instant.now().toString())
+                .put("payload", payload);
+
+        if (transactionOutboxRepository == null) {
+            return kafkaService.sendExistingEvent(EventTopics.TRANSACTION,
+                    String.valueOf(tx.getOrderId()), event)
+                    .onFailure().recoverWithItem((Void) null);
+        }
+
+        TransactionOutbox outbox = new TransactionOutbox();
+        outbox.setEventId(eventId);
+        outbox.setTopic(EventTopics.TRANSACTION);
+        outbox.setEventKey(String.valueOf(tx.getOrderId()));
+        outbox.setPayload(event.encode());
+        return transactionOutboxRepository.persistEvent(outbox).replaceWithVoid();
     }
 }

@@ -2,7 +2,6 @@ package com.sanedge.order_item.handler;
 
 import java.util.stream.Collectors;
 
-import com.sanedge.common.domain.response.PaginationMeta;
 import com.sanedge.common.exception.ResourceNotFoundException;
 import com.sanedge.order_item.domain.requests.FindAllOrderItemRequest;
 import com.sanedge.order_item.domain.response.OrderItemResponse;
@@ -134,7 +133,10 @@ public class OrderItemQueryGrpcHandler extends MutinyOrderItemQueryServiceGrpc.O
                 });
     }
 
-    private pb.Api.PaginationMeta toProto(PaginationMeta m) {
+    private pb.Api.PaginationMeta toProto(com.sanedge.common.domain.response.PaginationMeta m) {
+        if (m == null) {
+            return pb.Api.PaginationMeta.getDefaultInstance();
+        }
         return pb.Api.PaginationMeta.newBuilder()
                 .setCurrentPage(m.currentPage())
                 .setPageSize(m.pageSize())

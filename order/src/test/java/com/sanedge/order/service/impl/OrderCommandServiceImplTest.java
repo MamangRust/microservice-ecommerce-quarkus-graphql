@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,7 +51,9 @@ import com.sanedge.order.domain.requests.UpdateOrderRequest;
 import com.sanedge.order.domain.response.OrderResponse;
 import com.sanedge.order.domain.response.OrderResponseDeleteAt;
 import com.sanedge.order.entity.Order;
+import com.sanedge.order.entity.OrderOutbox;
 import com.sanedge.order.repository.OrderCommandRepository;
+import com.sanedge.order.repository.OrderOutboxRepository;
 import com.sanedge.order.repository.OrderQueryRepository;
 
 import io.opentelemetry.api.common.Attributes;
@@ -94,6 +97,9 @@ class OrderCommandServiceImplTest {
         @Mock
         private ShippingAddressPort shippingAddressPort;
 
+        @Mock
+        private OrderOutboxRepository orderOutboxRepository;
+
         private OrderCommandServiceImpl service;
 
         @BeforeEach
@@ -111,6 +117,10 @@ class OrderCommandServiceImplTest {
                 service.orderItemPort = orderItemPort;
                 service.transactionPort = transactionPort;
                 service.shippingAddressPort = shippingAddressPort;
+                service.orderOutboxRepository = orderOutboxRepository;
+
+                lenient().when(orderOutboxRepository.persistEvent(any(OrderOutbox.class)))
+                                .thenAnswer(inv -> Uni.createFrom().item((OrderOutbox) inv.getArgument(0)));
 
                 lenient().doAnswer(invocation -> {
                         Supplier<Uni<?>> supplier = invocation.getArgument(3);
@@ -238,6 +248,40 @@ class OrderCommandServiceImplTest {
                         assertThat(response.message()).isEqualTo("Order created successfully");
                         assertThat(response.data()).isNotNull();
                         assertThat(response.data().getId()).isEqualTo(1L);
+                }
+
+                @Test
+                @DisplayName("should write the order and order_item events into the transactional outbox")
+                void createOrder_WritesEventsToOutbox() {
+                        CreateOrderRequest request = createValidCreateOrderRequest();
+                        mockMerchantAndUser();
+                        mockProductAndOrderItem();
+                        mockShipping();
+
+                        when(orderCommandRepository.persistNew(any(Order.class)))
+                                        .thenAnswer(inv -> {
+                                                Order o = inv.getArgument(0);
+                                                if (o.id == null)
+                                                        o.id = 1L;
+                                                return Uni.createFrom().item(o);
+                                        });
+                        lenient().when(orderItemPort.findOrderItemByOrder(anyInt()))
+                                        .thenReturn(Uni.createFrom().item(List.of(orderItem(1, 1, 1, 2, 100))));
+
+                        service.create(request).await().indefinitely();
+
+                        ArgumentCaptor<OrderOutbox> captor = ArgumentCaptor.forClass(OrderOutbox.class);
+                        verify(orderOutboxRepository, times(2)).persistEvent(captor.capture());
+
+                        List<OrderOutbox> rows = captor.getAllValues();
+                        assertThat(rows).extracting(OrderOutbox::getTopic)
+                                        .containsExactlyInAnyOrder("stats.ecommerce.order.event",
+                                                        "stats.ecommerce.order_item.event");
+                        assertThat(rows).allSatisfy(row -> {
+                                assertThat(row.getEventId()).isNotBlank();
+                                assertThat(row.getStatus()).isEqualTo("PENDING");
+                                assertThat(row.getPayload()).contains("event_id");
+                        });
                 }
 
                 @Test

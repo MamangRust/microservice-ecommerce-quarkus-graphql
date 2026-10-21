@@ -46,10 +46,14 @@ import com.sanedge.transaction.domain.requests.UpdateTransactionRequest;
 import com.sanedge.transaction.domain.response.TransactionResponse;
 import com.sanedge.transaction.domain.response.TransactionResponseDeleteAt;
 import com.sanedge.transaction.entity.Transaction;
+import com.sanedge.transaction.entity.TransactionOutbox;
 import com.sanedge.transaction.enums.PaymentStatus;
 import com.sanedge.transaction.repository.TransactionCommandRepository;
+import com.sanedge.transaction.repository.TransactionOutboxRepository;
 import com.sanedge.transaction.repository.TransactionQueryRepository;
 import com.sanedge.transaction.service.KafkaService;
+
+import org.mockito.ArgumentCaptor;
 
 import io.opentelemetry.api.common.Attributes;
 import io.smallrye.mutiny.Uni;
@@ -85,6 +89,9 @@ class TransactionCommandServiceImplTest {
         private KafkaService kafkaService;
 
         @Mock
+        private TransactionOutboxRepository transactionOutboxRepository;
+
+        @Mock
         private TracingMetrics tracingMetrics;
 
         private TransactionCommandServiceImpl service;
@@ -104,6 +111,10 @@ class TransactionCommandServiceImplTest {
                 setField(service, "userPort", userPort);
 
                 setField(service, "kafkaService", kafkaService);
+                setField(service, "transactionOutboxRepository", transactionOutboxRepository);
+
+                lenient().when(transactionOutboxRepository.persistEvent(any(TransactionOutbox.class)))
+                                .thenAnswer(inv -> Uni.createFrom().item((TransactionOutbox) inv.getArgument(0)));
 
                 lenient().doAnswer(invocation -> {
                         @SuppressWarnings("unchecked")
@@ -223,6 +234,36 @@ class TransactionCommandServiceImplTest {
                         assertThat(response.data().getId()).isEqualTo(1L);
 
                         verify(redisService, atLeastOnce()).deleteReactive(anyString());
+                }
+
+                @Test
+                @DisplayName("should write the stats event into the transactional outbox")
+                void create_WritesStatsEventToOutbox() {
+                        CreateTransactionRequest req = createValidCreateRequest();
+                        mockCreateDependencies();
+
+                        when(transactionCommandRepo.persist(any(Transaction.class)))
+                                        .thenAnswer(inv -> {
+                                                Transaction t = inv.getArgument(0);
+                                                t.setId(1L);
+                                                return Uni.createFrom().item(t);
+                                        });
+
+                        service.create(req).await().indefinitely();
+
+                        ArgumentCaptor<TransactionOutbox> captor = ArgumentCaptor.forClass(TransactionOutbox.class);
+                        verify(transactionOutboxRepository, atLeastOnce()).persistEvent(captor.capture());
+
+                        List<TransactionOutbox> rows = captor.getAllValues();
+                        assertThat(rows).extracting(TransactionOutbox::getTopic)
+                                        .contains("stats.ecommerce.transaction.event");
+                        TransactionOutbox stats = rows.stream()
+                                        .filter(r -> "stats.ecommerce.transaction.event".equals(r.getTopic()))
+                                        .findFirst()
+                                        .orElseThrow();
+                        assertThat(stats.getEventId()).isNotBlank();
+                        assertThat(stats.getEventKey()).isEqualTo("1");
+                        assertThat(stats.getPayload()).contains("event_id");
                 }
         }
 

@@ -23,6 +23,19 @@ public class TransactionOutboxRepository implements PanacheRepository<Transactio
         return count("status = 'PENDING'");
     }
 
+    /**
+     * Stores a domain event in the transactional outbox.
+     *
+     * <p>When called from a business operation that already runs inside a
+     * transaction the nested {@code @WithTransaction} joins that transaction,
+     * so the event row and the business row are committed (or rolled back)
+     * together. Called on its own it opens its own transaction.
+     */
+    @WithTransaction
+    public Uni<TransactionOutbox> persistEvent(TransactionOutbox event) {
+        return persist(event);
+    }
+
     @WithTransaction
     public Uni<List<TransactionOutbox>> findDue(int limit) {
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
